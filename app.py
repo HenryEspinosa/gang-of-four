@@ -40,7 +40,16 @@ def fill_model_combo(combo, selected: str, model_ids: list):
     combo.setCurrentIndex(idx if idx >= 0 else 0)
 
 APP_TITLE = "Gang of Four"
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+def _resource_root() -> str:
+    """Directory that holds bundled resources. When frozen by PyInstaller the
+    data files are unpacked under sys._MEIPASS; otherwise it's this file's dir."""
+    base = getattr(sys, "_MEIPASS", None)
+    return base or os.path.dirname(os.path.abspath(__file__))
+
+
+ASSETS_DIR = os.path.join(_resource_root(), "assets")
 
 
 # --------------------------------------------------------------------------- #
