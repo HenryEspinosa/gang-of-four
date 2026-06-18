@@ -114,8 +114,19 @@ sudo apt install -y libxcb-cursor0 libegl1
 
 ## Setup
 
-1. Get an API key from <https://www.perplexity.ai/account/api>.
-2. Launch the app → **⚙ Settings** → paste the key → **Save**.
+**This app requires your own Perplexity API key** — it talks directly to
+Perplexity on your behalf, so without a key it can't answer anything.
+
+1. **Get a Perplexity API key.** Follow Perplexity's own documentation, which is
+   the authoritative, up-to-date source for the exact steps:
+   <https://docs.perplexity.ai/>. In short, you'll create a Perplexity account
+   and generate an API key (it starts with `pplx-`). Note that the API is
+   **pay-as-you-go** — you add billing/credits and pay per question (typically a
+   few cents each); it's billed separately from any Perplexity Pro subscription.
+2. **Add the key to the app:** launch it → **⚙ Settings** → paste the key →
+   **Save**. (The app prompts for this on first launch.) Keep your key private —
+   don't share it or commit it anywhere. Advanced users can instead set the
+   `PERPLEXITY_API_KEY` environment variable.
 3. Type a question and press **Ctrl+Enter** (or click **Send**).
 
 ## Project layout
