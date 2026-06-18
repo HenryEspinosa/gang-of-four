@@ -61,7 +61,16 @@ MODEL_LABELS = {
 
 
 def is_agent_model(model: str) -> bool:
-    return "/" in model
+    # A provider-prefixed id routes to the Agent API -- EXCEPT Perplexity's own
+    # models (e.g. "perplexity/sonar"), which the live /v1/models catalogue now
+    # prefixes but which still belong on the Sonar Chat API.
+    return "/" in model and not model.startswith("perplexity/")
+
+
+def sonar_model_id(model: str) -> str:
+    """The Sonar Chat API expects bare ids ("sonar", "sonar-pro"), not the
+    "perplexity/"-prefixed form the live catalogue returns."""
+    return model.split("/", 1)[1] if model.startswith("perplexity/") else model
 
 
 def display_name(model: str) -> str:
@@ -224,7 +233,7 @@ class PerplexityClient:
         if is_agent_model(model):
             return self._complete_agent(model, messages, temperature, search_mode, max_tokens)
         body = {
-            "model": model,
+            "model": sonar_model_id(model),
             "messages": messages,
             "temperature": temperature,
             "search_mode": search_mode,
@@ -259,7 +268,7 @@ class PerplexityClient:
             yield res.text, res.citations
             return
         body = {
-            "model": model,
+            "model": sonar_model_id(model),
             "messages": messages,
             "temperature": temperature,
             "search_mode": search_mode,
@@ -276,16 +285,28 @@ class PerplexityClient:
         ) as resp:
             if resp.status_code != 200:
                 raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:500]}")
+            # A single "data:" SSE payload can be split across several lines when
+            # its JSON contains raw newlines (Perplexity embeds them in citation
+            # snippets). So accumulate lines until the buffer is valid JSON, and
+            # parse with strict=False to tolerate those embedded control chars.
+            buf = ""
             for raw in resp.iter_lines(decode_unicode=True):
-                if not raw or not raw.startswith("data:"):
+                if raw is None:
                     continue
-                chunk = raw[len("data:"):].strip()
-                if chunk == "[DONE]":
-                    break
+                if raw.startswith("data:"):
+                    piece = raw[len("data:"):].lstrip()
+                    if piece == "[DONE]":
+                        break
+                    buf = piece            # new event; drop any unparsed remnant
+                elif buf:
+                    buf += "\n" + raw      # continuation of a split JSON payload
+                else:
+                    continue
                 try:
-                    payload = json.loads(chunk)
+                    payload = json.loads(buf, strict=False)
                 except json.JSONDecodeError:
-                    continue
+                    continue               # incomplete; wait for more lines
+                buf = ""
                 delta = ""
                 choices = payload.get("choices") or []
                 if choices:
