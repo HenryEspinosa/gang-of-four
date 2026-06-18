@@ -22,7 +22,7 @@ jobs:
         include:
           - os: windows-latest
             asset: GangOfFour-Windows.exe
-          - os: macos-13 # Intel build: runs on Intel Macs natively and Apple Silicon via Rosetta
+          - os: macos-latest # Apple Silicon (arm64) build; fast runners. Note: won't run on older Intel Macs.
             asset: GangOfFour-macOS.zip
           - os: ubuntu-latest
             asset: GangOfFour-Linux.tar.gz

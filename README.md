@@ -38,10 +38,35 @@ providers* in one council.
 > personalities sharing one body. Same idea here — several minds deliberating,
 > resolved into one voice.
 
+## Download & install
+
+Grab the latest build for your system from the
+**[Releases page](https://github.com/HenryEspinosa/gang-of-four/releases/latest)**.
+No Python or setup required — just download and open. You'll also need a
+Perplexity API key (see [Setup](#setup) below).
+
+> **Note:** these builds are not code-signed, so your OS will show a one-time
+> "unidentified developer" warning the first time you open the app. That's
+> expected; the steps below get past it.
+
+- **Windows** — download `GangOfFour-Windows.exe` and double-click it. If
+  Windows SmartScreen says "Windows protected your PC", click **More info →
+  Run anyway**.
+- **macOS** (Apple Silicon) — download `GangOfFour-macOS.zip`, unzip it, and drag
+  `GangOfFour.app` to your Applications folder. The first time, **right-click the
+  app → Open** (not a double-click) and confirm, so macOS lets it run.
+- **Linux** — download `GangOfFour-Linux.tar.gz`, extract it, and run the
+  `GangOfFour` binary (`chmod +x GangOfFour` if needed). On a minimal system you
+  may need the Qt runtime libs: `sudo apt install -y libxcb-cursor0 libegl1`.
+
+Prefer to run from source instead? See [Run](#run).
+
 ## How it talks to Perplexity
 
 The app uses **two Perplexity API surfaces**, and routes each model to the right
-one automatically (any model id containing `/` goes to the Agent API):
+one automatically (a provider-prefixed id like `openai/…` goes to the Agent API;
+Perplexity's own models — including the catalogue's `perplexity/sonar` — go to
+the Sonar Chat API):
 
 | Surface | Endpoint | Models | Streaming |
 |---|---|---|---|
