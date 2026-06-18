@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Gang of Four
+Comment=Multi-model Perplexity council chat (Blindsight-inspired)
+# Replace /path/to/gang-of-four below with the folder where you cloned this repo.
+Exec=/path/to/gang-of-four/run.sh
+Path=/path/to/gang-of-four
+Icon=/path/to/gang-of-four/assets/icon_256.png
+Terminal=false
+Categories=Utility;Network;

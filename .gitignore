@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Packaging / build output (PyInstaller, etc.)
+build/
+dist/
+
+# Local tooling / agent settings
+.claude/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Just-in-case: the app stores its key outside the repo, but never commit one
+config.json
