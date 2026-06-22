@@ -30,6 +30,8 @@ from council import (
     PerplexityClient, CouncilController, AVAILABLE_MODELS, display_name,
 )
 
+VERSION = "0.2.0"
+
 SEARCH_MODES = ["web", "academic", "sec"]
 
 
@@ -273,6 +275,60 @@ class SettingsDialog(QDialog):
 
 
 # --------------------------------------------------------------------------- #
+# About dialog
+# --------------------------------------------------------------------------- #
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"About {APP_TITLE}")
+        self.setFixedWidth(380)
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(12)
+        lay.setContentsMargins(24, 24, 24, 20)
+
+        # Icon + name row
+        header = QHBoxLayout()
+        icon_lbl = QLabel()
+        pm = QPixmap(os.path.join(ASSETS_DIR, "icon_64.png"))
+        if not pm.isNull():
+            icon_lbl.setPixmap(pm)
+        header.addWidget(icon_lbl)
+        header.addSpacing(12)
+        name_lbl = QLabel(f"<b style='font-size:16px'>{APP_TITLE}</b><br>"
+                          f"<span style='color:#7a8694'>Version {VERSION}</span>")
+        name_lbl.setTextFormat(Qt.RichText)
+        header.addWidget(name_lbl)
+        header.addStretch()
+        lay.addLayout(header)
+
+        desc = QLabel(
+            "Ask one question, get the wisdom of several AI models at once.\n\n"
+            "Built on the Perplexity API. Council mode fans a question across\n"
+            "multiple models in parallel, then synthesizes one combined answer."
+        )
+        desc.setWordWrap(True)
+        desc.setObjectName("aboutDesc")
+        lay.addWidget(desc)
+
+        link = QLabel(
+            '<a href="https://github.com/HenryEspinosa/gang-of-four">'
+            'github.com/HenryEspinosa/gang-of-four</a>'
+        )
+        link.setOpenExternalLinks(True)
+        link.setTextFormat(Qt.RichText)
+        lay.addWidget(link)
+
+        license_lbl = QLabel("MIT License © Enrique Espinosa")
+        license_lbl.setObjectName("aboutDesc")
+        lay.addWidget(license_lbl)
+
+        btn = QDialogButtonBox(QDialogButtonBox.Ok)
+        btn.accepted.connect(self.accept)
+        lay.addWidget(btn)
+
+
+# --------------------------------------------------------------------------- #
 # Input box (Ctrl+Enter to send)
 # --------------------------------------------------------------------------- #
 class InputBox(QPlainTextEdit):
@@ -389,6 +445,10 @@ class ChatWindow(QMainWindow):
         settings_btn = QPushButton("⚙  Settings")
         settings_btn.clicked.connect(self._open_settings)
         tl.addWidget(settings_btn)
+
+        about_btn = QPushButton("About")
+        about_btn.clicked.connect(self._open_about)
+        tl.addWidget(about_btn)
 
         # History (far-left) panel
         self.history_panel = self._build_history_panel()
@@ -591,6 +651,7 @@ class ChatWindow(QMainWindow):
             #historyTitle:hover { color: #ffffff; }
             #dangerBtn { color: #ffb4b4; }
             #dangerBtn:hover { background: #3a2326; border-color: #5a3035; }
+            #aboutDesc { color: #9aaabb; }
             """
             + f"QTextBrowser {{ font-size: {fs}px; }}"
             + f" QPlainTextEdit {{ font-size: {fs}px; }}"
@@ -635,6 +696,9 @@ class ChatWindow(QMainWindow):
         self.council_panel.setVisible(self.council_toggle.isChecked())
 
     # ---- Settings / toolbar actions -------------------------------------- #
+    def _open_about(self):
+        AboutDialog(self).exec()
+
     def _open_settings(self):
         dlg = SettingsDialog(self.cfg, self.model_ids, self)
         if dlg.exec() == QDialog.Accepted:
