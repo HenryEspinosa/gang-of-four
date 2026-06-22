@@ -534,7 +534,7 @@ class ChatWindow(QMainWindow):
         self.send_btn = QPushButton("Send")
         self.send_btn.setObjectName("sendBtn")
         self.send_btn.setFixedWidth(110)
-        self.send_btn.clicked.connect(self._send)
+        self.send_btn.clicked.connect(self._on_send_btn_clicked)
         il.addWidget(self.send_btn)
         iv.addLayout(il)
 
@@ -627,6 +627,8 @@ class ChatWindow(QMainWindow):
             #sendBtn { background: #3b82f6; border: none; font-weight: bold; }
             #sendBtn:hover { background: #2f6fe0; }
             #sendBtn:disabled { background: #2a3340; color: #6b7682; }
+            #stopBtn { background: #7c2020; border: none; font-weight: bold; color: #ffb4b4; }
+            #stopBtn:hover { background: #8b2525; }
             #councilCard { background: #11161d; border: 1px solid #232a33; border-radius: 8px; }
             #councilHeader {
                 background: transparent; border: none; padding: 10px;
@@ -891,12 +893,29 @@ class ChatWindow(QMainWindow):
         else:
             self._run_single(client, text)
 
+    def _on_send_btn_clicked(self):
+        if self._running:
+            self._cancel_request()
+        else:
+            self._send()
+
+    def _cancel_request(self):
+        if self.controller is not None:
+            self.controller.cancel()
+        if self._assist_row is not None:
+            text = (self._assist_buffer + "\n\n*— stopped —*") if self._assist_buffer else "*— stopped —*"
+            self._assist_row.set_markdown(text)
+        self.status.setText("Stopped.")
+        self._set_running(False)
+
     def _set_running(self, running: bool):
         self._running = running
-        self.send_btn.setEnabled(not running)
         self.input.setEnabled(not running)
         self.attach_btn.setEnabled(not running)
-        self.send_btn.setText("…" if running else "Send")
+        self.send_btn.setText("Stop" if running else "Send")
+        self.send_btn.setObjectName("stopBtn" if running else "sendBtn")
+        self.send_btn.style().unpolish(self.send_btn)
+        self.send_btn.style().polish(self.send_btn)
 
     # ---- Single model path ----------------------------------------------- #
     def _run_single(self, client: PerplexityClient, question: str):
@@ -918,6 +937,7 @@ class ChatWindow(QMainWindow):
 
         # Stream directly without the council fan-out.
         import threading
+        ctrl = self.controller  # capture so the closure doesn't race with reassignment
 
         def work():
             try:
@@ -927,15 +947,17 @@ class ChatWindow(QMainWindow):
                     model, history, self.cfg.get("temperature", 0.2),
                     self.cfg.get("search_mode", "web"),
                 ):
+                    if ctrl._cancel.is_set():
+                        return
                     if delta:
                         full.append(delta)
-                        self.controller.synthesisChunk.emit(delta)
+                        ctrl.synthesisChunk.emit(delta)
                     for u in c:
                         if u not in cites:
                             cites.append(u)
-                self.controller.synthesisFinished.emit("".join(full), cites)
+                ctrl.synthesisFinished.emit("".join(full), cites)
             except Exception as e:  # noqa: BLE001
-                self.controller.failed.emit(str(e))
+                ctrl.failed.emit(str(e))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1012,6 +1034,8 @@ class ChatWindow(QMainWindow):
         self._scroll_to_bottom()
 
     def _on_finished(self, full_text: str, citations: list):
+        if not self._running:
+            return  # cancelled — discard stale signal
         text = full_text or self._assist_buffer
         # Persist clean text (without sources) to history for follow-ups.
         self.messages.append({"role": "assistant", "content": text})
@@ -1029,6 +1053,8 @@ class ChatWindow(QMainWindow):
         self._scroll_to_bottom()
 
     def _on_failed(self, error: str):
+        if not self._running:
+            return  # cancelled — discard stale signal
         if self._assist_row is not None:
             self._assist_row.set_markdown(f"**Error:** {error}")
         else:
