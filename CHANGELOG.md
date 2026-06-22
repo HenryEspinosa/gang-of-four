@@ -3,6 +3,27 @@
 All notable changes to **Gang of Four** are recorded here. This project aims to
 follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-06-22
+
+### Added
+- **Stop button** — the Send button turns red and becomes Stop while a request
+  is running. Clicking it cancels the stream, marks the partial response
+  *"— stopped —"*, and re-enables the input immediately.
+- **AI-generated chat titles** — after the first response in a new conversation,
+  the synthesizer model generates a 5–8 word descriptive title that replaces
+  the raw truncated question text in the history sidebar.
+- **About dialog** — version number, description, GitHub link, and license,
+  accessible via the About button in the top bar.
+
+### Fixed
+- **Council no longer fails when one model fails** — app-internal message keys
+  (introduced for the document-upload UI) were being sent to the Sonar Chat API,
+  causing HTTP 400 errors on every Sonar-path member. A new `_api_messages()`
+  helper strips non-API keys at the boundary.
+- **Synthesis failure now surfaces member answers** — if the synthesis step
+  fails after members succeed, the longest individual answer is shown rather
+  than a dead-end error.
+
 ## [0.2.0] — 2026-06-22
 
 ### Added
