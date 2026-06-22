@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QAction, QFont, QKeySequence, QTextDocument, QIcon, QPixmap, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -755,10 +756,45 @@ class ChatWindow(QMainWindow):
         """Save the active conversation if it has any content."""
         if self.messages:
             if self.current.title in ("", "New chat"):
-                first = next((m["content"] for m in self.messages
-                              if m["role"] == "user"), "")
+                # Temporary title from the raw question until AI title arrives.
+                first = next((m.get("display") or m.get("content", "")
+                              for m in self.messages if m["role"] == "user"), "")
                 self.current.title = store.title_from(first) or "New chat"
             store.save(self.current)
+
+    def _generate_title(self):
+        """Ask the synthesizer model for a short descriptive title, then update
+        the sidebar. Runs in a background thread; safe to call and forget."""
+        client = self._client()
+        if client is None:
+            return
+        question = self._current_question
+        model = self.cfg.get("synth_model", "sonar-pro")
+        conv_id = self.current.id  # guard against switching chats mid-flight
+
+        def work():
+            try:
+                msgs = [{"role": "user", "content": (
+                    "Write a short title of 5 to 8 words that captures the topic "
+                    "of this question. No punctuation at the end. Return only the "
+                    f"title, nothing else.\n\nQuestion: {question}"
+                )}]
+                res = client.complete(model, msgs, temperature=0.0, search_mode="web")
+                title = res.text.strip().strip('"\'').strip()
+                if title:
+                    QTimer.singleShot(0, lambda t=title: self._apply_generated_title(conv_id, t))
+            except Exception:
+                pass  # keep the truncated placeholder title
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _apply_generated_title(self, conv_id: str, title: str):
+        """Called on the main thread once the AI title is ready."""
+        if self.current.id != conv_id:
+            return  # user switched to a different chat — leave it alone
+        self.current.title = title[:72]
+        store.save(self.current)
+        self._refresh_history()
 
     def _refresh_history(self):
         while self.history_list_layout.count() > 1:
@@ -936,7 +972,6 @@ class ChatWindow(QMainWindow):
         history = list(self.messages)
 
         # Stream directly without the council fan-out.
-        import threading
         ctrl = self.controller  # capture so the closure doesn't race with reassignment
 
         def work():
@@ -1048,6 +1083,9 @@ class ChatWindow(QMainWindow):
             self._assist_row.set_markdown(display)
         self._persist_current()   # save the completed turn
         self._refresh_history()
+        # Generate an AI title after the first completed turn.
+        if sum(1 for m in self.messages if m.get("role") == "assistant") == 1:
+            self._generate_title()
         self.status.setText("Done.")
         self._set_running(False)
         self._scroll_to_bottom()
