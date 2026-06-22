@@ -18,12 +18,14 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QPlainTextEdit, QTextBrowser, QScrollArea, QFrame, QSplitter,
     QDialog, QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QCheckBox,
-    QDialogButtonBox, QFormLayout, QGroupBox, QToolButton, QSizePolicy, QMessageBox,
+    QDialogButtonBox, QFormLayout, QGroupBox, QToolButton, QSizePolicy,
+    QMessageBox, QFileDialog,
 )
 
 import config
 import store
 import council
+import documents
 from council import (
     PerplexityClient, CouncilController, AVAILABLE_MODELS, display_name,
 )
@@ -304,6 +306,8 @@ class ChatWindow(QMainWindow):
         self._assist_row: MessageRow | None = None
         self._current_question = ""
         self._running = False
+        self._doc_text = ""
+        self._doc_name = ""
 
         self.setWindowTitle(APP_TITLE)
         self.resize(1320, 780)
@@ -432,8 +436,39 @@ class ChatWindow(QMainWindow):
         # Input area
         input_frame = QFrame()
         input_frame.setObjectName("inputFrame")
-        il = QHBoxLayout(input_frame)
-        il.setContentsMargins(16, 10, 16, 14)
+        iv = QVBoxLayout(input_frame)
+        iv.setContentsMargins(16, 8, 16, 10)
+        iv.setSpacing(4)
+
+        # Document indicator — hidden until a file is attached
+        self.doc_indicator = QFrame()
+        self.doc_indicator.setObjectName("docIndicator")
+        di = QHBoxLayout(self.doc_indicator)
+        di.setContentsMargins(8, 4, 8, 4)
+        di.setSpacing(8)
+        self.doc_label = QLabel()
+        self.doc_label.setObjectName("docLabel")
+        di.addWidget(self.doc_label)
+        di.addStretch()
+        clear_doc_btn = QPushButton("✕")
+        clear_doc_btn.setObjectName("clearDocBtn")
+        clear_doc_btn.setFixedSize(22, 22)
+        clear_doc_btn.setToolTip("Remove attached document")
+        clear_doc_btn.clicked.connect(self._clear_document)
+        di.addWidget(clear_doc_btn)
+        self.doc_indicator.setVisible(False)
+        iv.addWidget(self.doc_indicator)
+
+        il = QHBoxLayout()
+        il.setSpacing(8)
+        self.attach_btn = QPushButton("📎")
+        self.attach_btn.setObjectName("attachBtn")
+        self.attach_btn.setFixedWidth(38)
+        self.attach_btn.setToolTip(
+            "Attach a document\n(PDF, Word, Excel, PowerPoint, text/CSV/Markdown)"
+        )
+        self.attach_btn.clicked.connect(self._attach_document)
+        il.addWidget(self.attach_btn)
         self.input = InputBox(self._send)
         il.addWidget(self.input)
         self.send_btn = QPushButton("Send")
@@ -441,6 +476,7 @@ class ChatWindow(QMainWindow):
         self.send_btn.setFixedWidth(110)
         self.send_btn.clicked.connect(self._send)
         il.addWidget(self.send_btn)
+        iv.addLayout(il)
 
         # Status line
         self.status = QLabel("")
@@ -559,6 +595,15 @@ class ChatWindow(QMainWindow):
             + f"QTextBrowser {{ font-size: {fs}px; }}"
             + f" QPlainTextEdit {{ font-size: {fs}px; }}"
             + f" #historyTitle {{ font-size: {fs}px; }}"
+            + """
+            #attachBtn { background: #232a33; border: 1px solid #2a3340; border-radius: 8px; color: #e6e9ef; font-size: 17px; padding: 0; }
+            #attachBtn:hover { background: #2c3540; }
+            #attachBtn:disabled { color: #4a5560; }
+            #docIndicator { background: #0d1f35; border: 1px solid #1e3a5f; border-radius: 6px; }
+            #docLabel { color: #7ab4ff; font-size: 12px; }
+            #clearDocBtn { background: transparent; border: none; color: #7a8694; font-size: 13px; padding: 0; min-width: 0; border-radius: 4px; }
+            #clearDocBtn:hover { color: #ffffff; background: #2a3340; }
+            """
         )
 
     # ---- Helpers ---------------------------------------------------------- #
@@ -711,7 +756,7 @@ class ChatWindow(QMainWindow):
         self._clear_council()
         for m in self.messages:
             if m.get("role") == "user":
-                self._add_row("You", "user", m.get("content", ""))
+                self._add_row("You", "user", m.get("display") or m.get("content", ""))
             elif m.get("role") == "assistant":
                 self._add_row("Assistant", "ai", m.get("content", ""))
         self._scroll_to_bottom()
@@ -724,6 +769,30 @@ class ChatWindow(QMainWindow):
             w = item.widget()
             if w:
                 w.deleteLater()
+
+    # ---- Document attachment ---------------------------------------------- #
+    def _attach_document(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Attach document", "", documents.FILTER
+        )
+        if not path:
+            return
+        try:
+            text = documents.extract_text(path)
+        except Exception as e:  # noqa: BLE001
+            self.status.setText(f"Could not read document: {e}")
+            return
+        self._doc_text = text
+        self._doc_name = os.path.basename(path)
+        self.doc_label.setText(f"📄  {self._doc_name}  ({len(text):,} chars extracted)")
+        self.doc_indicator.setVisible(True)
+        self.status.setText(f"Document attached: {self._doc_name}")
+
+    def _clear_document(self):
+        self._doc_text = ""
+        self._doc_name = ""
+        self.doc_indicator.setVisible(False)
+        self.status.setText("Document removed.")
 
     # ---- Sending a turn --------------------------------------------------- #
     def _send(self):
@@ -739,14 +808,22 @@ class ChatWindow(QMainWindow):
             return
 
         self.input.clear()
-        self._add_row("You", "user", text)
-        self.messages.append({"role": "user", "content": text})
+
+        if self._doc_text:
+            api_content = f"[Document: {self._doc_name}]\n{self._doc_text}\n\n---\n{text}"
+            display_text = f"📄 *{self._doc_name}*\n\n{text}"
+        else:
+            api_content = text
+            display_text = text
+
+        self._add_row("You", "user", display_text)
+        self.messages.append({"role": "user", "content": api_content, "display": display_text})
         self._current_question = text
         self._persist_current()   # title + save so it shows in the sidebar now
         self._refresh_history()
 
         if self.council_toggle.isChecked():
-            self._run_council(client, text)
+            self._run_council(client, text)   # bare question for synthesis prompt; history has doc
         else:
             self._run_single(client, text)
 
@@ -754,6 +831,7 @@ class ChatWindow(QMainWindow):
         self._running = running
         self.send_btn.setEnabled(not running)
         self.input.setEnabled(not running)
+        self.attach_btn.setEnabled(not running)
         self.send_btn.setText("…" if running else "Send")
 
     # ---- Single model path ----------------------------------------------- #

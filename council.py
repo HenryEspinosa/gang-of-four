@@ -289,6 +289,7 @@ class PerplexityClient:
             # its JSON contains raw newlines (Perplexity embeds them in citation
             # snippets). So accumulate lines until the buffer is valid JSON, and
             # parse with strict=False to tolerate those embedded control chars.
+            resp.encoding = "utf-8"
             buf = ""
             for raw in resp.iter_lines(decode_unicode=True):
                 if raw is None:

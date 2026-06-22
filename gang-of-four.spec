@@ -9,6 +9,8 @@ Build locally with:  pyinstaller gang-of-four.spec
 (CI runs exactly this on each OS — see .github/workflows/build.yml)
 """
 
+import os
+import shutil
 import sys
 
 APP_NAME = "GangOfFour"
@@ -19,12 +21,51 @@ if sys.platform == "win32":
 elif sys.platform == "darwin":
     icon = "assets/icon.icns"
 
+# --------------------------------------------------------------------------- #
+# Tesseract OCR bundling
+# Locate the tesseract binary and eng/osd traineddata on the build machine,
+# then include them so the frozen app can OCR scanned PDFs without any extra
+# install step on the user's machine.
+# --------------------------------------------------------------------------- #
+_tess_bin = shutil.which("tesseract")
+
+# Windows: choco may not add to PATH yet — check the fixed install dir.
+if sys.platform == "win32" and not _tess_bin:
+    _win_default = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.isfile(_win_default):
+        _tess_bin = _win_default
+
+_tess_binaries = [((_tess_bin, "."))] if _tess_bin else []
+
+# Locate tessdata directory on the build machine.
+if sys.platform == "win32":
+    _tess_data_src = os.path.join(os.path.dirname(_tess_bin), "tessdata") if _tess_bin else ""
+elif sys.platform == "darwin":
+    _tess_data_src = next(
+        (d for d in ("/opt/homebrew/share/tessdata", "/usr/local/share/tessdata")
+         if os.path.isdir(d)), ""
+    )
+else:  # Linux
+    _tess_data_src = next(
+        (d for d in ("/usr/share/tesseract-ocr/5/tessdata",
+                     "/usr/share/tesseract-ocr/4.00/tessdata",
+                     "/usr/share/tessdata")
+         if os.path.isdir(d)), ""
+    )
+
+# Bundle only the two files needed for English OCR (~16 MB total).
+_tess_datas = [
+    (os.path.join(_tess_data_src, name), "tessdata")
+    for name in ("eng.traineddata", "osd.traineddata")
+    if _tess_data_src and os.path.isfile(os.path.join(_tess_data_src, name))
+]
+
 a = Analysis(
     ["app.py"],
     pathex=[],
-    binaries=[],
-    datas=[("assets", "assets")],  # unpacked to <bundle>/assets at runtime
-    hiddenimports=[],
+    binaries=_tess_binaries,
+    datas=[("assets", "assets")] + _tess_datas,  # assets + tessdata
+    hiddenimports=["fitz", "fitz._fitz", "docx", "pptx", "openpyxl"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
