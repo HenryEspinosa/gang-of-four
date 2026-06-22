@@ -112,6 +112,11 @@ class MemberResult:
     error: str | None = None
 
 
+def _api_messages(messages: list[dict]) -> list[dict]:
+    """Strip app-internal keys (e.g. 'display') so only role+content reach the API."""
+    return [{"role": m["role"], "content": m.get("content", "")} for m in messages]
+
+
 class PerplexityClient:
     """Thin wrapper over the Perplexity chat completions endpoint."""
 
@@ -234,7 +239,7 @@ class PerplexityClient:
             return self._complete_agent(model, messages, temperature, search_mode, max_tokens)
         body = {
             "model": sonar_model_id(model),
-            "messages": messages,
+            "messages": _api_messages(messages),
             "temperature": temperature,
             "search_mode": search_mode,
         }
@@ -269,7 +274,7 @@ class PerplexityClient:
             return
         body = {
             "model": sonar_model_id(model),
-            "messages": messages,
+            "messages": _api_messages(messages),
             "temperature": temperature,
             "search_mode": search_mode,
             "stream": True,
@@ -430,7 +435,15 @@ class CouncilController(QObject):
                     if u not in cites:
                         cites.append(u)
         except Exception as e:  # noqa: BLE001
-            self.failed.emit(f"Synthesis failed: {e}")
+            # Synthesis failed — fall back to the longest successful member answer
+            # so the user still gets something useful rather than just an error.
+            best = max(succeeded, key=lambda r: len(r.text))
+            fallback = (
+                f"*Synthesis unavailable ({e}). "
+                f"Showing the most complete individual answer ({best.model}):*\n\n"
+                + best.text
+            )
+            self.synthesisFinished.emit(fallback, best.citations)
             return
 
         self.synthesisFinished.emit("".join(full), cites)
