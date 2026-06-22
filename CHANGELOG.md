@@ -3,6 +3,23 @@
 All notable changes to **Gang of Four** are recorded here. This project aims to
 follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-06-22
+
+### Added
+- **Document upload** — attach a PDF, Word (.docx), Excel (.xlsx), PowerPoint
+  (.pptx), or plain-text/CSV/Markdown file to any chat with the new 📎 button.
+  The document's text is injected into the conversation so every council member
+  and the synthesizer can reason over it.
+- **Built-in OCR** — scanned PDFs are recognised automatically and run through
+  Tesseract OCR without any extra install step. Tesseract and the English
+  language model are bundled inside every platform release.
+
+### Fixed
+- **Garbled text / mojibake** (`â€™` instead of `'`) — Perplexity's SSE stream
+  was being decoded as ISO-8859-1 because the server omits a `charset` header.
+  Forcing UTF-8 before the streaming loop fixes all curly quotes, em-dashes, and
+  other non-ASCII characters.
+
 ## [0.1.0] — 2026-06-18
 
 First public release: a native, cross-platform desktop app that asks several AI
