@@ -282,10 +282,10 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"About {APP_TITLE}")
-        self.setFixedWidth(380)
+        self.setMinimumWidth(460)
 
         lay = QVBoxLayout(self)
-        lay.setSpacing(12)
+        lay.setSpacing(14)
         lay.setContentsMargins(24, 24, 24, 20)
 
         # Icon + name row
@@ -304,9 +304,11 @@ class AboutDialog(QDialog):
         lay.addLayout(header)
 
         desc = QLabel(
-            "Ask one question, get the wisdom of several AI models at once.\n\n"
-            "Built on the Perplexity API. Council mode fans a question across\n"
-            "multiple models in parallel, then synthesizes one combined answer."
+            "Ask one question, get the wisdom of several AI models at once. "
+            "Council mode fans your question across multiple AI models in parallel, "
+            "then has a synthesizer read all their answers and produce one combined "
+            "reply that highlights where they agree, disagree, and what each one "
+            "uniquely contributed. Built on the Perplexity API."
         )
         desc.setWordWrap(True)
         desc.setObjectName("aboutDesc")
@@ -327,6 +329,8 @@ class AboutDialog(QDialog):
         btn = QDialogButtonBox(QDialogButtonBox.Ok)
         btn.accepted.connect(self.accept)
         lay.addWidget(btn)
+
+        self.adjustSize()
 
 
 # --------------------------------------------------------------------------- #
