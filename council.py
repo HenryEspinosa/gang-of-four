@@ -208,8 +208,9 @@ class PerplexityClient:
         }
         if system:
             body["instructions"] = system
-        if max_tokens:
-            body["max_output_tokens"] = max_tokens
+        # Anthropic models require max_output_tokens; include it for all Agent
+        # API calls so we never hit that validation error regardless of model.
+        body["max_output_tokens"] = max_tokens or 8192
         resp = requests.post(
             f"{self.base_url}/v1/agent",
             headers=self._headers(),
