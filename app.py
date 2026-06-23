@@ -31,7 +31,7 @@ from council import (
     PerplexityClient, CouncilController, AVAILABLE_MODELS, display_name,
 )
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 SEARCH_MODES = ["web", "academic", "sec"]
 

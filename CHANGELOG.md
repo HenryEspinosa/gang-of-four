@@ -3,7 +3,7 @@
 All notable changes to **Gang of Four** are recorded here. This project aims to
 follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.1] — 2026-06-23
 
 ### Fixed
 - **`<think>` tag leakage removed** — `sonar-reasoning-pro` and other
@@ -16,6 +16,12 @@ follow [Semantic Versioning](https://semver.org/).
 - **Stale council model IDs auto-pruned** — on startup, any saved council
   member whose ID is no longer in the live `/v1/models` catalogue is silently
   removed from config so it never causes a query-time API error.
+- **Model dropdown now scrollable** — model selectors cap at 20 visible items
+  and show a scrollbar when the live catalogue returns more entries than fit.
+- **Third-party models under the `perplexity/` prefix now work** — Perplexity
+  lists models like GLM 5.2 as `perplexity/glm-5.2` in the catalogue. These
+  are now correctly routed to the Agent API instead of being misrouted to the
+  Sonar Chat API (which rejected them) or excluded from the list.
 - **Agent API model fallback list updated** — the offline/no-key fallback now
   lists conservative, current IDs (`gpt-4o`, `gemini-2.5-pro-preview`, etc.)
   instead of speculative future IDs.
