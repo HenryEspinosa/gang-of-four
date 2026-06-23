@@ -43,6 +43,8 @@ def fill_model_combo(combo, selected: str, model_ids: list):
         combo.addItem(display_name(m), m)
     idx = combo.findData(selected)
     combo.setCurrentIndex(idx if idx >= 0 else 0)
+    combo.setMaxVisibleItems(20)
+    combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
 APP_TITLE = "Gang of Four"
 
