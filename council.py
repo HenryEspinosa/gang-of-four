@@ -88,8 +88,21 @@ def display_name(model: str) -> str:
     return f"{pretty} ({brand})"
 
 
+# Only models whose provider prefix the app knows how to route are shown.
+# Bare sonar IDs go to the Sonar Chat API; everything else needs a "/" and
+# a known provider to reach the Agent API.
+_ROUTABLE_PREFIXES = (
+    "sonar",          # bare Sonar Chat API ids (sonar, sonar-pro, …)
+    "perplexity/",    # live catalogue prefixes Sonar ids with "perplexity/"
+    "openai/",
+    "google/",
+    "anthropic/",
+    "xai/",
+)
+
+
 def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> list[str]:
-    """GET the live model catalogue (OpenAI-compatible /v1/models)."""
+    """GET the live model catalogue, filtered to models the app can route."""
     r = requests.get(
         f"{base_url.rstrip('/')}/v1/models",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -97,7 +110,8 @@ def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> l
     )
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
-    return [m["id"] for m in r.json().get("data", []) if m.get("id")]
+    ids = [m["id"] for m in r.json().get("data", []) if m.get("id")]
+    return [m for m in ids if any(m.startswith(p) for p in _ROUTABLE_PREFIXES)]
 
 MEMBER_SYSTEM_PROMPT = (
     "You are one member of an AI council answering a user's question. "
