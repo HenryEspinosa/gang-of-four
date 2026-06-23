@@ -88,17 +88,25 @@ def display_name(model: str) -> str:
     return f"{pretty} ({brand})"
 
 
-# Only models whose provider prefix the app knows how to route are shown.
-# Bare sonar IDs go to the Sonar Chat API; everything else needs a "/" and
-# a known provider to reach the Agent API.
-_ROUTABLE_PREFIXES = (
-    "sonar",          # bare Sonar Chat API ids (sonar, sonar-pro, …)
-    "perplexity/",    # live catalogue prefixes Sonar ids with "perplexity/"
-    "openai/",
-    "google/",
-    "anthropic/",
-    "xai/",
-)
+_AGENT_PROVIDERS = {"openai", "google", "anthropic", "xai"}
+
+
+def _is_routable(model_id: str) -> bool:
+    """Return True only for model IDs the app can route to a working API call.
+
+    Bare sonar/r1 names  -> Sonar Chat API.
+    perplexity/<name>    -> Sonar Chat API, but only for actual Sonar/r1 models;
+                           Perplexity's catalogue also lists third-party models
+                           (e.g. perplexity/glm-5.2) under this prefix that the
+                           Sonar Chat API will reject.
+    openai|google|anthropic|xai/<name>  -> Agent API.
+    """
+    if "/" not in model_id:
+        return model_id.startswith("sonar") or model_id.startswith("r1-")
+    provider, name = model_id.split("/", 1)
+    if provider == "perplexity":
+        return name.startswith("sonar") or name.startswith("r1-")
+    return provider in _AGENT_PROVIDERS
 
 
 def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> list[str]:
@@ -111,7 +119,7 @@ def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> l
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
     ids = [m["id"] for m in r.json().get("data", []) if m.get("id")]
-    return [m for m in ids if any(m.startswith(p) for p in _ROUTABLE_PREFIXES)]
+    return [m for m in ids if _is_routable(m)]
 
 MEMBER_SYSTEM_PROMPT = (
     "You are one member of an AI council answering a user's question. "
