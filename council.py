@@ -60,8 +60,16 @@ _PROVIDER_BRANDS = {
 def is_agent_model(model: str) -> bool:
     # A provider-prefixed id routes to the Agent API -- EXCEPT Perplexity's own
     # models (e.g. "perplexity/sonar"), which the live /v1/models catalogue now
-    # prefixes but which still belong on the Sonar Chat API.
-    return "/" in model and not model.startswith("perplexity/")
+    # Perplexity's live catalogue also lists third-party models under the
+    # "perplexity/" prefix (e.g. perplexity/glm-5.2). Those belong on the
+    # Agent API, not the Sonar Chat API — only the actual sonar and r1 models
+    # under that prefix stay on the Sonar Chat API.
+    if "/" not in model:
+        return False
+    provider, name = model.split("/", 1)
+    if provider == "perplexity":
+        return not (name.startswith("sonar") or name.startswith("r1-"))
+    return True
 
 
 def sonar_model_id(model: str) -> str:
@@ -88,25 +96,16 @@ def display_name(model: str) -> str:
     return f"{pretty} ({brand})"
 
 
-_AGENT_PROVIDERS = {"openai", "google", "anthropic", "xai"}
-
-
 def _is_routable(model_id: str) -> bool:
-    """Return True only for model IDs the app can route to a working API call.
+    """Return True for model IDs the app knows how to route.
 
-    Bare sonar/r1 names  -> Sonar Chat API.
-    perplexity/<name>    -> Sonar Chat API, but only for actual Sonar/r1 models;
-                           Perplexity's catalogue also lists third-party models
-                           (e.g. perplexity/glm-5.2) under this prefix that the
-                           Sonar Chat API will reject.
-    openai|google|anthropic|xai/<name>  -> Agent API.
+    Bare ids must be sonar/r1 Sonar Chat API models.
+    Any provider-prefixed id is routable: is_agent_model() decides which
+    endpoint to use, so new providers added to the catalogue work automatically.
     """
     if "/" not in model_id:
         return model_id.startswith("sonar") or model_id.startswith("r1-")
-    provider, name = model_id.split("/", 1)
-    if provider == "perplexity":
-        return name.startswith("sonar") or name.startswith("r1-")
-    return provider in _AGENT_PROVIDERS
+    return True
 
 
 def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> list[str]:
