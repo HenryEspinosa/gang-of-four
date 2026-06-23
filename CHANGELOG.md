@@ -3,6 +3,27 @@
 All notable changes to **Gang of Four** are recorded here. This project aims to
 follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **`<think>` tag leakage removed** — `sonar-reasoning-pro` and other
+  reasoning models embed `<think>…</think>` blocks in their output. These are
+  now stripped before text reaches the UI, both in streaming (stateful chunk
+  filter) and non-streaming paths.
+- **About dialog no longer clips its content** — replaced the fixed 380 px
+  width with a 460 px minimum and added `adjustSize()` so the dialog resizes
+  to fit its text on all platforms.
+- **Stale council model IDs auto-pruned** — on startup, any saved council
+  member whose ID is no longer in the live `/v1/models` catalogue is silently
+  removed from config so it never causes a query-time API error.
+- **Agent API model fallback list updated** — the offline/no-key fallback now
+  lists conservative, current IDs (`gpt-4o`, `gemini-2.5-pro-preview`, etc.)
+  instead of speculative future IDs.
+- **Model labels auto-generated** — `display_name()` now derives a readable
+  label from any provider-prefixed model ID (e.g. `anthropic/claude-opus-4-8`
+  → *Claude Opus 4.8 (Anthropic)*), so new models from the live catalogue
+  always show a clean name rather than a raw ID string.
+
 ## [0.3.0] — 2026-06-22
 
 ### Added

@@ -388,7 +388,16 @@ class ChatWindow(QMainWindow):
         key = self.cfg.get("api_key", "")
         if key:
             try:
-                return council.fetch_models(key)
+                ids = council.fetch_models(key)
+                # Remove saved council members that are no longer in the live
+                # catalogue so stale IDs don't cause API errors at query time.
+                live = set(ids)
+                saved = self.cfg.get("council_models", [])
+                valid = [m for m in saved if m in live]
+                if valid != saved:
+                    self.cfg["council_models"] = valid
+                    config.save(self.cfg)
+                return ids
             except Exception:  # noqa: BLE001
                 pass
         return list(AVAILABLE_MODELS)

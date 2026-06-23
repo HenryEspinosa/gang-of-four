@@ -10,6 +10,7 @@ answer that highlights where the members agree and disagree.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 
@@ -30,33 +31,29 @@ SONAR_MODELS = [
     "sonar-deep-research",
 ]
 
-# A curated subset of the Agent API catalogue. Any valid Agent API id works if
-# you add it here. Full list: https://docs.perplexity.ai/docs/agent-api/models
+# Conservative fallback Agent API model IDs used when the live catalogue is
+# unavailable. The live /v1/models list always wins when the app is online.
+# Full list: https://docs.perplexity.ai/docs/agent-api/models
 AGENT_MODELS = [
-    "openai/gpt-5.5",
-    "openai/gpt-5.4",
-    "openai/gpt-5.4-mini",
-    "google/gemini-3.1-pro-preview",
-    "google/gemini-3.5-flash",
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "google/gemini-2.5-pro-preview",
+    "google/gemini-2.0-flash",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-haiku-4-5",
-    "xai/grok-4.3",
+    "anthropic/claude-haiku-4-5-20251001",
+    "xai/grok-3-beta",
 ]
 
 AVAILABLE_MODELS = SONAR_MODELS + AGENT_MODELS
 
-# Friendly labels for the UI (falls back to the raw id).
-MODEL_LABELS = {
-    "openai/gpt-5.5": "openai/gpt-5.5 (ChatGPT)",
-    "openai/gpt-5.4": "openai/gpt-5.4 (ChatGPT)",
-    "openai/gpt-5.4-mini": "openai/gpt-5.4-mini (ChatGPT)",
-    "google/gemini-3.1-pro-preview": "google/gemini-3.1-pro (Gemini Pro)",
-    "google/gemini-3.5-flash": "google/gemini-3.5-flash (Gemini)",
-    "anthropic/claude-opus-4-8": "anthropic/claude-opus-4-8 (Claude)",
-    "anthropic/claude-sonnet-4-6": "anthropic/claude-sonnet-4-6 (Claude)",
-    "anthropic/claude-haiku-4-5": "anthropic/claude-haiku-4-5 (Claude)",
-    "xai/grok-4.3": "xai/grok-4.3 (Grok)",
+# Per-provider display names for label generation.
+_PROVIDER_BRANDS = {
+    "openai": "OpenAI",
+    "google": "Google",
+    "anthropic": "Anthropic",
+    "xai": "xAI",
+    "perplexity": "Perplexity",
 }
 
 
@@ -74,7 +71,21 @@ def sonar_model_id(model: str) -> str:
 
 
 def display_name(model: str) -> str:
-    return MODEL_LABELS.get(model, model)
+    """Human-readable label for any model id, including live-catalogue ids."""
+    if "/" not in model:
+        return model
+    provider, name = model.split("/", 1)
+    brand = _PROVIDER_BRANDS.get(provider, provider.title())
+    # Strip date-build suffixes (e.g. -20251001), then collapse "N-N" version
+    # pairs (e.g. -4-8 → 4.8) that Anthropic uses in their model ids.
+    pretty = re.sub(r"-\d{8}$", "", name)
+    pretty = re.sub(r"-(\d+)-(\d+)(-|$)", r" \1.\2\3", pretty)
+    def _cap(w: str) -> str:
+        if w.upper() in ("GPT", "XAI"):
+            return w.upper()
+        return w if w[0].isdigit() else w.title()
+    pretty = " ".join(_cap(w) for w in pretty.replace("-", " ").split())
+    return f"{pretty} ({brand})"
 
 
 def fetch_models(api_key: str, base_url: str = BASE_URL, timeout: int = 20) -> list[str]:
@@ -115,6 +126,53 @@ class MemberResult:
 def _api_messages(messages: list[dict]) -> list[dict]:
     """Strip app-internal keys (e.g. 'display') so only role+content reach the API."""
     return [{"role": m["role"], "content": m.get("content", "")} for m in messages]
+
+
+def _strip_think(text: str) -> str:
+    """Remove <think>...</think> blocks that reasoning models emit before their answer."""
+    return re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL)
+
+
+class _ThinkFilter:
+    """Stateful filter that strips <think>...</think> blocks from a text stream
+    where tags may be split across chunk boundaries."""
+
+    def __init__(self):
+        self._buf = ""
+        self._inside = False
+
+    def feed(self, chunk: str) -> str:
+        """Consume *chunk*, return displayable text (may be empty while inside a block)."""
+        self._buf += chunk
+        out = []
+        while True:
+            if self._inside:
+                i = self._buf.find("</think>")
+                if i == -1:
+                    keep = len("</think>") - 1
+                    self._buf = self._buf[-keep:] if len(self._buf) > keep else self._buf
+                    break
+                self._buf = self._buf[i + len("</think>"):]
+                self._inside = False
+            else:
+                i = self._buf.find("<think>")
+                if i == -1:
+                    keep = len("<think>") - 1
+                    if len(self._buf) > keep:
+                        out.append(self._buf[:-keep])
+                        self._buf = self._buf[-keep:]
+                    break
+                out.append(self._buf[:i])
+                self._buf = self._buf[i + len("<think>"):]
+                self._inside = True
+        return "".join(out)
+
+    def flush(self) -> str:
+        """Emit remaining buffered text at end of stream."""
+        if self._inside:
+            return ""
+        result, self._buf = self._buf, ""
+        return result
 
 
 class PerplexityClient:
@@ -222,7 +280,7 @@ class PerplexityClient:
         data = resp.json()
         return MemberResult(
             model=model,
-            text=self._extract_agent_text(data),
+            text=_strip_think(self._extract_agent_text(data)),
             citations=self._extract_agent_citations(data),
         )
 
@@ -255,7 +313,7 @@ class PerplexityClient:
         if resp.status_code != 200:
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:500]}")
         data = resp.json()
-        text = data["choices"][0]["message"]["content"]
+        text = _strip_think(data["choices"][0]["message"]["content"])
         return MemberResult(model=model, text=text, citations=self._extract_citations(data))
 
     def stream(
@@ -297,6 +355,7 @@ class PerplexityClient:
             # parse with strict=False to tolerate those embedded control chars.
             resp.encoding = "utf-8"
             buf = ""
+            tf = _ThinkFilter()
             for raw in resp.iter_lines(decode_unicode=True):
                 if raw is None:
                     continue
@@ -319,8 +378,12 @@ class PerplexityClient:
                 if choices:
                     delta = choices[0].get("delta", {}).get("content", "") or ""
                 citations = self._extract_citations(payload)
-                if delta or citations:
-                    yield delta, citations
+                clean = tf.feed(delta) if delta else ""
+                if clean or citations:
+                    yield clean, citations
+            remaining = tf.flush()
+            if remaining:
+                yield remaining, []
 
 
 def build_synthesis_input(question: str, members: list[MemberResult]) -> str:
