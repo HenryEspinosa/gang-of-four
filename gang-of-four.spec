@@ -9,6 +9,7 @@ Build locally with:  pyinstaller gang-of-four.spec
 (CI runs exactly this on each OS — see .github/workflows/build.yml)
 """
 
+import glob
 import os
 import shutil
 import sys
@@ -60,10 +61,28 @@ _tess_datas = [
     if _tess_data_src and os.path.isfile(os.path.join(_tess_data_src, name))
 ]
 
+# --------------------------------------------------------------------------- #
+# libxcb-cursor bundling (Linux)
+# Qt's XCB platform plugin requires libxcb-cursor.so.0, but it is not
+# universally installed (the libxcb-cursor0 package is absent on some distros
+# and older Ubuntu versions).  Bundle it so the frozen app works out of the box.
+# --------------------------------------------------------------------------- #
+if sys.platform == "linux":
+    _xcb_cursor = next(
+        iter(
+            glob.glob("/usr/lib/*/libxcb-cursor.so.0")
+            + glob.glob("/usr/lib/libxcb-cursor.so.0")
+        ),
+        None,
+    )
+    _xcb_cursor_binaries = [(_xcb_cursor, ".")] if _xcb_cursor else []
+else:
+    _xcb_cursor_binaries = []
+
 a = Analysis(
     ["app.py"],
     pathex=[],
-    binaries=_tess_binaries,
+    binaries=_tess_binaries + _xcb_cursor_binaries,
     datas=[("assets", "assets")] + _tess_datas,  # assets + tessdata
     hiddenimports=["fitz", "fitz._fitz", "docx", "pptx", "openpyxl"],
     hookspath=[],
